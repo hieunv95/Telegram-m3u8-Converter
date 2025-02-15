@@ -19,7 +19,7 @@ xconfession_token = os.environ['XCONFESSION_TOKEN']
 xconfession_headers = {"Authorization": f"Bearer {xconfession_token}"}
 
 dropbox_token = os.environ['DROPBOX_ACCESS_TOKEN']
-team_member_id = '699964769'
+team_member_id = 'dbmid:AADtqt5k9g4iR19G4cUAzefiAKIe3U1lxTQ'
 
 dbx = dropbox.DropboxTeam(dropbox_token)
 
@@ -62,21 +62,54 @@ def extract_1080p_stream(m3u8_content, base_url):
 
     return None  # Không tìm thấy 1080
 
+# def upload_to_dropbox(file_path, dropbox_path):
+#     """
+#     Tải file lên Dropbox (không giới hạn kích thước).
+#     """
+#     dbx = dropbox.DropboxTeam(dropbox_token)
+    
+#     with open(file_path, "rb") as f:
+#         print(f"📤 Đang tải lên {file_path} lên Dropbox...")
+
+#         try:
+#             dbx = dbx.as_user(team_member_id)
+#             dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
+#             print("✅ Tải lên Dropbox thành công!")
+#         except Exception as e:
+#             print(f"❌ Lỗi khi tải lên Dropbox: {e}")
+
+# Dropbox chunk size (48MB is a safe choice)
+CHUNK_SIZE = 48 * 1024 * 1024  # 48MB
+
 def upload_to_dropbox(file_path, dropbox_path):
     """
-    Tải file lên Dropbox (không giới hạn kích thước).
+    Uploads a file to Dropbox. Uses chunked upload if file is larger than 150MB.
     """
     dbx = dropbox.DropboxTeam(dropbox_token)
-    
-    with open(file_path, "rb") as f:
-        print(f"📤 Đang tải lên {file_path} lên Dropbox...")
+    dbx = dbx.as_user(team_member_id)
 
-        try:
-            dbx = dbx.as_user(team_member_id)
-            dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
-            print("✅ Tải lên Dropbox thành công!")
-        except Exception as e:
-            print(f"❌ Lỗi khi tải lên Dropbox: {e}")
+    file_size = os.path.getsize(file_path)
+    print(f"📂 File size: {file_size / (1024 * 1024):.2f} MB")
+
+    with open(file_path, "rb") as f:
+        if file_size <= 150 * 1024 * 1024:  # If file <= 150MB, use simple upload
+            print("📤 Using simple upload...")
+            dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("add"))
+        else:
+            print("📤 Using chunked upload...")
+            upload_session_start_result = dbx.files_upload_session_start(f.read(CHUNK_SIZE))
+            cursor = dropbox.files.UploadSessionCursor(session_id=upload_session_start_result.session_id, offset=f.tell())
+            commit = dropbox.files.CommitInfo(path=dropbox_path)
+
+            while f.tell() < file_size:
+                print(f"⏳ Uploading chunk... {f.tell() / file_size:.2%} done")
+                dbx.files_upload_session_append(f.read(CHUNK_SIZE), cursor.session_id, cursor.offset)
+                cursor.offset = f.tell()
+
+            # Finish upload
+            dbx.files_upload_session_finish(f.read(CHUNK_SIZE), cursor, commit)
+            print("✅ Upload complete!")
+
 
 def extract_best_stream(m3u8_content, base_url, duration, size_limit=2 * 1024 * 1024 * 1024):
     """
