@@ -11,7 +11,8 @@ from urllib.parse import urljoin
 api_id = os.environ['API_ID']
 api_hash = os.environ['API_HASH']
 bot_token = os.environ['BOT_TOKEN']
-dump_id = os.environ['DUMP_ID']
+#dump_id = os.environ['DUMP_ID']
+dump_id = ''
 xconfession_domain = 'https://next-prod-api.xconfessions.com/api/movies/'
 xconfession_token = os.environ['XCONFESSION_TOKEN']
 xconfession_headers = {"Authorization": f"Bearer {xconfession_token}"}
@@ -34,19 +35,36 @@ def requestXConfession(path):
         return response.json()
     return None
 
-def extract_1080p_url(m3u8_content, base_url):
+def extract_best_stream(m3u8_content, base_url, size_limit=2 * 1024 * 1024 * 1024):
     """
-    Extracts only the 1920x1080 resolution stream URL from an M3U8 file and adds the base domain.
+    Extracts 1080p stream if available. If its estimated file size > 2GB, fall back to 720p.
+    Returns the best available stream URL.
     """
-    # Regular expression to find the 1920x1080 resolution stream URL
-    match = re.search(r'#EXT-X-STREAM-INF:RESOLUTION=1920x1080.*\n(.*)', m3u8_content)
-    
-    if match:
-        stream_url = match.group(1).strip()  # Extract URL
-        full_url = urljoin(base_url, stream_url)  # Add base domain
-        return full_url
-    else:
-        return None  # No 1080p stream found
+    # Define regex patterns for 1080p and 720p streams
+    patterns = {
+        "1080p": re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1920x1080.*?BANDWIDTH=(\d+).*?\n(.*?)$', re.MULTILINE),
+        "720p": re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1280x720.*?BANDWIDTH=(\d+).*?\n(.*?)$', re.MULTILINE)
+    }
+
+    # Try to extract 1080p first
+    for quality, pattern in patterns.items():
+        match = pattern.search(m3u8_content)
+        if match:
+            bandwidth = int(match.group(1))  # BANDWIDTH in bits per second
+            url = match.group(2).strip()  # Extract stream URL
+
+            # Estimate file size assuming a 2-hour video
+            estimated_size = (bandwidth / 8) * (2 * 60 * 60)  # Convert bits to bytes
+
+            # If it's 1080p and too large (>2GB), continue to check 720p
+            if quality == "1080p" and estimated_size > size_limit:
+                continue  # Skip 1080p and try 720p
+
+            # Otherwise, return the stream URL
+            full_url = urljoin(base_url, url)
+            return full_url
+
+    return None  # No valid stream found
 
 def time_to_seconds(time_str):
     """
@@ -102,8 +120,8 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     m3u8_content = m3u8_res.text;
     base_url = urljoin(stream_link, '.');
     print(f"base_url: {base_url}")
-    link = extract_1080p_url(m3u8_content, base_url)
-    print(f"Link: {link}")
+    link = extract_best_stream(m3u8_content, base_url)
+    print(f"link: {link}")
 
     filename = f'{id}_{int(time())}'
     proc = await asyncio.create_subprocess_shell(
