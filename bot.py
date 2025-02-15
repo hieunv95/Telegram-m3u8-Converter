@@ -7,6 +7,7 @@ from time import time
 import requests
 import re
 from urllib.parse import urljoin
+import dropbox
 
 api_id = os.environ['API_ID']
 api_hash = os.environ['API_HASH']
@@ -16,6 +17,19 @@ dump_id = ''
 xconfession_domain = 'https://next-prod-api.xconfessions.com/api/movies/'
 xconfession_token = os.environ['XCONFESSION_TOKEN']
 xconfession_headers = {"Authorization": f"Bearer {xconfession_token}"}
+
+dropbox_token = os.environ['DROPBOX_ACCESS_TOKEN']
+team_member_id = '699964769'
+
+dbx = dropbox.DropboxTeam(dropbox_token)
+
+# try:
+#     members = dbx.team_members_list().members
+#     for member in members:
+#         print(f"Member ID: {member.profile.team_member_id} - Email: {member.profile.email}")
+# except Exception as e:
+#     print(f"❌ Error: {e}")
+
 
 
 app = Client('m3u8', api_id, api_hash, bot_token=bot_token)
@@ -35,7 +49,36 @@ def requestXConfession(path):
         return response.json()
     return None
 
-def extract_best_stream(m3u8_content, base_url, size_limit=2 * 1024 * 1024 * 1024):
+def extract_1080p_stream(m3u8_content, base_url):
+    """
+    Trích xuất URL video 1080p từ nội dung M3U8.
+    """
+    pattern = re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1920x1080.*?\n(.*?)$', re.MULTILINE)
+    match = pattern.search(m3u8_content)
+
+    if match:
+        stream_url = match.group(1).strip()
+        return urljoin(base_url, stream_url)  # Chuyển đổi URL đầy đủ
+
+    return None  # Không tìm thấy 1080
+
+def upload_to_dropbox(file_path, dropbox_path):
+    """
+    Tải file lên Dropbox (không giới hạn kích thước).
+    """
+    dbx = dropbox.DropboxTeam(dropbox_token)
+    
+    with open(file_path, "rb") as f:
+        print(f"📤 Đang tải lên {file_path} lên Dropbox...")
+
+        try:
+            dbx = dbx.as_user(team_member_id)
+            dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
+            print("✅ Tải lên Dropbox thành công!")
+        except Exception as e:
+            print(f"❌ Lỗi khi tải lên Dropbox: {e}")
+
+def extract_best_stream(m3u8_content, base_url, duration, size_limit=2 * 1024 * 1024 * 1024):
     """
     Extracts 1080p stream if available. If its estimated file size > 2GB, fall back to 720p.
     Returns the best available stream URL.
@@ -53,8 +96,7 @@ def extract_best_stream(m3u8_content, base_url, size_limit=2 * 1024 * 1024 * 102
             bandwidth = int(match.group(1))  # BANDWIDTH in bits per second
             url = match.group(2).strip()  # Extract stream URL
 
-            # Estimate file size assuming a 2-hour video
-            estimated_size = (bandwidth / 8) * (2 * 60 * 60)  # Convert bits to bytes
+            estimated_size = (bandwidth / 8) * duration  # Convert bits to bytes
 
             # If it's 1080p and too large (>2GB), continue to check 720p
             if quality == "1080p" and estimated_size > size_limit:
@@ -120,8 +162,11 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     m3u8_content = m3u8_res.text;
     base_url = urljoin(stream_link, '.');
     print(f"base_url: {base_url}")
-    link = extract_best_stream(m3u8_content, base_url)
+    link = extract_best_stream(m3u8_content, base_url, duration=duration)
     print(f"link: {link}")
+
+    dropbox_link = extract_1080p_stream(m3u8_content, base_url)
+    print(f"dropbox_link: {dropbox_link}")
 
     filename = f'{id}_{int(time())}'
     proc = await asyncio.create_subprocess_shell(
@@ -133,6 +178,17 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     out, err = await proc.communicate()
     await _info.edit('File successfully converted.')
     print('\n\n\n', out, err, sep='\n')
+
+    dropbox_filename = filename if dropbox_link == link else f'{id}_{int(time())}'
+    if dropbox_link != link:
+      drop_proc = await asyncio.create_subprocess_shell(
+        f'ffmpeg -i {link} -c copy -bsf:a aac_adtstoasc {dropbox_filename}.mp4',
+        stdout=PIPE,
+        stderr=PIPE
+      )
+      out, err = await drop_proc.communicate()
+      await _info.edit('File Dropbox successfully converted.')
+      print('\n\n\n', out, err, sep='\n')
     try: 
         await _info.edit('Adding thumbnail...')
         # proc2 = await asyncio.create_subprocess_shell(
@@ -170,10 +226,15 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         await _info.edit("Uploading file to Telegram...")
         def progress(current, total):
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
-        await client.send_video(dump_id if dump_id else message.chat.id, f'{filename}.mp4', duration=duration, thumb=f'{thumbnail_path}', caption = f'{caption}', progress=progress, supports_streaming=True)
+        #await client.send_video(dump_id if dump_id else message.chat.id, f'{filename}.mp4', duration=duration, thumb=f'{thumbnail_path}', caption = f'{caption}', progress=progress, supports_streaming=True)
+        
+        await _info.edit("Uploading file to Dropbox...")
+        upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions/{title}.mp4")
         os.remove(f'{filename}.mp4')
         #os.remove(f'{filename}.jpg')
         os.remove(f'{thumbnail_path}')
+        if dropbox_filename != filename:
+          os.remove(f'{dropbox_filename}.mp4')
     except:
         print_exc()
         return await _info.edit('`An error occurred.`')
