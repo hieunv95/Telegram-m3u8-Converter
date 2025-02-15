@@ -215,7 +215,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     dropbox_filename = filename if dropbox_link == link else f'{id}_{int(time())}'
     if dropbox_link != link:
       drop_proc = await asyncio.create_subprocess_shell(
-        f'ffmpeg -i {link} -c copy -bsf:a aac_adtstoasc {dropbox_filename}.mp4',
+        f'ffmpeg -i {dropbox_link} -c copy -bsf:a aac_adtstoasc {dropbox_filename}.mp4',
         stdout=PIPE,
         stderr=PIPE
       )
@@ -259,7 +259,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         await _info.edit("Uploading file to Telegram...")
         def progress(current, total):
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
-        #await client.send_video(dump_id if dump_id else message.chat.id, f'{filename}.mp4', duration=duration, thumb=f'{thumbnail_path}', caption = f'{caption}', progress=progress, supports_streaming=True)
+        await client.send_video(dump_id if dump_id else message.chat.id, f'{filename}.mp4', duration=duration, thumb=f'{thumbnail_path}', caption = f'{caption}', progress=progress, supports_streaming=True)
         
         await _info.edit("Uploading file to Dropbox...")
         upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions/{title}.mp4")
