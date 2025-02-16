@@ -17,8 +17,6 @@ api_id = os.environ['API_ID']
 api_hash = os.environ['API_HASH']
 bot_token = os.environ['BOT_TOKEN']
 dump_id = int(os.environ['DUMP_ID'])
-#dump_id = -1001541610005
-#dump_id = ''
 xconfession_domain = 'https://next-prod-api.xconfessions.com/api/movies/'
 xconfession_token = os.environ['XCONFESSION_TOKEN']
 xconfession_headers = {"Authorization": f"Bearer {xconfession_token}"}
@@ -120,35 +118,91 @@ def upload_to_dropbox(file_path, dropbox_path):
             print("✅ Upload complete!")
 
 
-def extract_best_stream(m3u8_content, base_url, duration, size_limit=2 * 1024 * 1024 * 1024):
+# def extract_best_stream(m3u8_content, base_url, duration, size_limit=2 * 1024 * 1024 * 1024):
+#     """
+#     Extracts 1080p stream if available. If its estimated file size > 2GB, fall back to 720p.
+#     Returns the best available stream URL.
+#     """
+#     # Define regex patterns for 1080p and 720p streams
+#     patterns = {
+#         "1080p": re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1920x1080.*?BANDWIDTH=(\d+).*?\n(.*?)$', re.MULTILINE),
+#         "720p": re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1280x720.*?BANDWIDTH=(\d+).*?\n(.*?)$', re.MULTILINE)
+#     }
+
+#     # Try to extract 1080p first
+#     for quality, pattern in patterns.items():
+#         match = pattern.search(m3u8_content)
+#         if match:
+#             bandwidth = int(match.group(1))  # BANDWIDTH in bits per second
+#             url = match.group(2).strip()  # Extract stream URL
+
+#             estimated_size = (bandwidth / 8) * duration  # Convert bits to bytes
+
+#             # If it's 1080p and too large (>2GB), continue to check 720p
+#             if quality == "1080p" and estimated_size > size_limit:
+#                 continue  # Skip 1080p and try 720p
+
+#             # Otherwise, return the stream URL
+#             full_url = urljoin(base_url, url)
+#             return full_url
+
+#     return None  # No valid stream found
+
+
+def extract_best_stream(m3u8_content, base_url, duration=0, stream_type="video", prefer_highest_quality=False):
     """
-    Extracts 1080p stream if available. If its estimated file size > 2GB, fall back to 720p.
-    Returns the best available stream URL.
+    Extracts the best available stream URL from an M3U8 playlist.
+    - If `prefer_highest_quality=True`, returns the highest quality stream.
+    - Otherwise, selects the best stream under 2GB. If all exceed 2GB, returns the lowest quality.
+
+    Parameters:
+        m3u8_content (str): The content of the M3U8 file.
+        duration (int): The total video duration in seconds.
+        base_url (str): The base URL of the M3U8 file to construct full URLs.
+        stream_type (str): "video" (default) or "audio" to filter specific streams.
+        prefer_highest_quality (bool): If True, returns the highest quality stream.
+
+    Returns:
+        str: The full stream URL or None if not found.
     """
-    # Define regex patterns for 1080p and 720p streams
-    patterns = {
-        "1080p": re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1920x1080.*?BANDWIDTH=(\d+).*?\n(.*?)$', re.MULTILINE),
-        "720p": re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1280x720.*?BANDWIDTH=(\d+).*?\n(.*?)$', re.MULTILINE)
-    }
 
-    # Try to extract 1080p first
-    for quality, pattern in patterns.items():
-        match = pattern.search(m3u8_content)
-        if match:
-            bandwidth = int(match.group(1))  # BANDWIDTH in bits per second
-            url = match.group(2).strip()  # Extract stream URL
+    # Regex pattern to find EXT-X-STREAM-INF (video) with BANDWIDTH
+    if stream_type == "video":
+        pattern = r'#EXT-X-STREAM-INF:.*?BANDWIDTH=(\d+).*?\n(.*?)\n'
+    elif stream_type == "audio":
+        pattern = r'#EXT-X-MEDIA:TYPE=AUDIO.*?URI="([^"]+)"'
+    else:
+        raise ValueError("stream_type must be 'video' or 'audio'")
 
-            estimated_size = (bandwidth / 8) * duration  # Convert bits to bytes
+    # Find all matching streams
+    matches = re.findall(pattern, m3u8_content)
 
-            # If it's 1080p and too large (>2GB), continue to check 720p
-            if quality == "1080p" and estimated_size > size_limit:
-                continue  # Skip 1080p and try 720p
+    if not matches:
+        return None  # No valid stream found
 
-            # Otherwise, return the stream URL
-            full_url = urljoin(base_url, url)
-            return full_url
+    # Sort streams by BANDWIDTH (highest first)
+    sorted_streams = sorted(matches, key=lambda x: int(x[0]), reverse=True)
 
-    return None  # No valid stream found
+    if prefer_highest_quality:
+        print("🔹 Returning highest quality stream.")
+        selected_stream = sorted_streams[0][1].strip()
+        return urljoin(base_url, selected_stream)
+
+    for bandwidth, stream_url in sorted_streams:
+        bandwidth = int(bandwidth)
+        stream_url = stream_url.strip()
+
+        # Estimate file size in GB
+        estimated_size = (bandwidth * duration) / (8 * 10**9)
+        print(f"Checking {stream_url} - Estimated Size: {estimated_size:.2f} GB")
+
+        # If file size <= 2GB, return it immediately
+        if estimated_size <= 2:
+            return urljoin(base_url, stream_url)
+
+    # If all streams exceed 2GB, return the lowest quality stream
+    print("All streams >2GB, selecting the lowest quality stream.")
+    return urljoin(base_url, sorted_streams[-1][1].strip())
 
 def time_to_seconds(time_str):
     """
@@ -260,7 +314,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     try: 
         audio_filename = f'{id}_{int(time())}'
         audio_proc = await asyncio.create_subprocess_shell(
-            f'ffmpeg -i {audio_link} -c copy {audio_filename}.aac',
+            f'ffmpeg -i "{audio_link}" -c copy -bufsize 20M -probesize 20M -threads 8 -preset ultrafast "{audio_filename}.aac"',
             stdout=PIPE,
             stderr=PIPE
         )
@@ -285,7 +339,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         #link = 'https://cloudflarestream.com/607315e23ecdd2a05ad6879d5198cc33/manifest/stream_tffe8f5b68ebf5b39c09f0447ad45d4a3_r897789428.m3u8?useVODOTFE=false'
 
 
-        dropbox_link = extract_1080p_stream(m3u8_content, base_url)
+        dropbox_link = extract_best_stream(m3u8_content, base_url, prefer_highest_quality=True)
         print(f"dropbox_link: {dropbox_link}")
 
         filename = f'{id}_{int(time())}'
