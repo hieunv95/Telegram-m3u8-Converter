@@ -309,8 +309,8 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
           out, err = await drop_proc.communicate()
           await _info.edit('File Dropbox successfully converted.')
           print('\n\n\n', out, err, sep='\n')
-        #await _info.edit('Adding thumbnail...')
-        #thumbnail_path = download_image(thumbnail_url)
+        await _info.edit('Adding thumbnail...')
+        thumbnail_path = download_image(thumbnail_url)
         # proc2 = await asyncio.create_subprocess_shell(
         #     f'ffmpeg -i {filename}.mp4 -ss 00:00:30.000 -vframes 5 {filename}.jpg',
         #     stdout=PIPE,
@@ -372,7 +372,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         
         os.remove(f'{filename}.mp4')
         os.remove(f'{audio_filename}.aac')
-        #os.remove(f'{thumbnail_path}')
+        os.remove(f'{thumbnail_path}')
         if dropbox_filename != filename:
           os.remove(f'{dropbox_filename}.mp4')
         if os.path.exists(f'{subtitle_filename}.vtt'):
@@ -383,8 +383,8 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     except:
         if os.path.exists(f'{filename}.mp4'):
           os.remove(f'{filename}.mp4')
-        #if os.path.exists(f'{thumbnail_path}'):
-          #os.remove(f'{thumbnail_path}')
+        if os.path.exists(f'{thumbnail_path}'):
+          os.remove(f'{thumbnail_path}')
         if os.path.exists(f'{subtitle_filename}.vtt'):
           os.remove(f'{subtitle_filename}.vtt')
         if os.path.exists(f'{subtitle_filename}.srt'):
