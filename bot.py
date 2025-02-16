@@ -17,6 +17,8 @@ api_id = os.environ['API_ID']
 api_hash = os.environ['API_HASH']
 bot_token = os.environ['BOT_TOKEN']
 dump_id = int(os.environ['DUMP_ID'])
+#dump_id = -1001541610005
+#dump_id = ''
 xconfession_domain = 'https://next-prod-api.xconfessions.com/api/movies/'
 xconfession_token = os.environ['XCONFESSION_TOKEN']
 xconfession_headers = {"Authorization": f"Bearer {xconfession_token}"}
@@ -307,8 +309,8 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
           out, err = await drop_proc.communicate()
           await _info.edit('File Dropbox successfully converted.')
           print('\n\n\n', out, err, sep='\n')
-        await _info.edit('Adding thumbnail...')
-        thumbnail_path = download_image(thumbnail_url)
+        #await _info.edit('Adding thumbnail...')
+        #thumbnail_path = download_image(thumbnail_url)
         # proc2 = await asyncio.create_subprocess_shell(
         #     f'ffmpeg -i {filename}.mp4 -ss 00:00:30.000 -vframes 5 {filename}.jpg',
         #     stdout=PIPE,
@@ -338,7 +340,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         await _info.edit("Uploading file to Telegram...")
         def progress(current, total):
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
-        await client.send_video(dump_id if dump_id else message.chat.id, f'{filename}.mp4', duration=duration, thumb=f'{thumbnail_path}', caption = f'{caption}', progress=progress, supports_streaming=True)
+        #await client.send_video(dump_id if dump_id else message.chat.id, f'{filename}.mp4', duration=duration, thumb=f'{thumbnail_path}', caption = f'{caption}', progress=progress, supports_streaming=True)
         
         performers = ", ".join(f"{performer['name']} {performer['last_name']}" for performer in metadata['data']['performers'])
         director_name = metadata['data']['director']['name']
@@ -367,21 +369,22 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
 
         await _info.edit("Uploading file to Dropbox...")
         upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions/{title}.mp4")
-        upload_to_dropbox(f'{subtitle_filename}.srt', f"/XConfessions/{title}.srt")
+        
         os.remove(f'{filename}.mp4')
         os.remove(f'{audio_filename}.aac')
-        os.remove(f'{thumbnail_path}')
+        #os.remove(f'{thumbnail_path}')
         if dropbox_filename != filename:
           os.remove(f'{dropbox_filename}.mp4')
         if os.path.exists(f'{subtitle_filename}.vtt'):
           os.remove(f'{subtitle_filename}.vtt')
         if os.path.exists(f'{subtitle_filename}.srt'):
+          upload_to_dropbox(f'{subtitle_filename}.srt', f"/XConfessions/{title}.srt")
           os.remove(f'{subtitle_filename}.srt')
     except:
         if os.path.exists(f'{filename}.mp4'):
           os.remove(f'{filename}.mp4')
-        if os.path.exists(f'{thumbnail_path}'):
-          os.remove(f'{thumbnail_path}')
+        #if os.path.exists(f'{thumbnail_path}'):
+          #os.remove(f'{thumbnail_path}')
         if os.path.exists(f'{subtitle_filename}.vtt'):
           os.remove(f'{subtitle_filename}.vtt')
         if os.path.exists(f'{subtitle_filename}.srt'):
