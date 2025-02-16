@@ -1,19 +1,22 @@
 from pyrogram import Client, filters
+from pyrogram.types import InputMediaPhoto, InputMediaVideo
+from pyrogram.enums import ParseMode
 import os
 import asyncio
 from traceback import print_exc
 from subprocess import PIPE, STDOUT
 from time import time
+from pyrogram.types.messages_and_media import audio
 import requests
 import re
 from urllib.parse import urljoin
 import dropbox
+import subprocess
 
 api_id = os.environ['API_ID']
 api_hash = os.environ['API_HASH']
 bot_token = os.environ['BOT_TOKEN']
-#dump_id = os.environ['DUMP_ID']
-dump_id = ''
+dump_id = int(os.environ['DUMP_ID'])
 xconfession_domain = 'https://next-prod-api.xconfessions.com/api/movies/'
 xconfession_token = os.environ['XCONFESSION_TOKEN']
 xconfession_headers = {"Authorization": f"Bearer {xconfession_token}"}
@@ -33,6 +36,10 @@ dbx = dropbox.DropboxTeam(dropbox_token)
 
 
 app = Client('m3u8', api_id, api_hash, bot_token=bot_token)
+
+# with app:
+#     user = app.get_me()
+#     print(user)
 
 def download_image(url, filename="thumbnail.jpg"):
     response = requests.get(url)
@@ -161,6 +168,47 @@ def time_to_seconds(time_str):
         print(f"Error parsing time: {e}")
         return 0  # Default to 0 if parsing fails
 
+def extract_audio_url(m3u8_content, base_url):
+    """Extracts the audio .m3u8 URL from M3U8 content."""
+    
+    match = re.search(r'#EXT-X-MEDIA:TYPE=AUDIO.*?URI="([^"]+)"', m3u8_content)
+    if match:
+        stream_url = match.group(1).strip()
+        return urljoin(base_url, stream_url)
+    return None
+
+
+def extract_english_subtitle(m3u8_content, base_url):
+    # Find English subtitle entry
+    match = re.search(r'#EXT-X-MEDIA:TYPE=SUBTITLES.*LANGUAGE="en".*URI="(.*?)"', m3u8_content)
+
+    if match:
+        stream_url = match.group(1).strip()
+        return urljoin(base_url, stream_url)
+
+    return None
+
+# def download_and_convert_subtitles(m3u8_url, vtt_file="subtitles.vtt", srt_file="subtitles.srt"):
+#     """Download subtitles from .m3u8 as .vtt and convert to .srt using FFmpeg."""
+    
+#     # Command to download .vtt
+#     download_command = ["ffmpeg", "-i", m3u8_url, "-c", "copy", vtt_file]
+
+#     # Command to convert .vtt to .srt
+#     convert_command = ["ffmpeg", "-i", vtt_file, srt_file]
+
+#     try:
+#         # Run download command
+#         subprocess.run(download_command, check=True)
+#         print(f"✅ Downloaded: {vtt_file}")
+
+#         # Run convert command
+#         subprocess.run(convert_command, check=True)
+#         print(f"✅ Converted: {srt_file}")
+
+#     except subprocess.CalledProcessError as e:
+#         print(f"❌ Error: {e}")
+
 
 @app.on_message(filters.command('start'))
 async def start(_, message):
@@ -187,6 +235,13 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     print(f"thumbnail_url: {thumbnail_url}")
     caption = f"{title} - XConfession"
     duration = time_to_seconds(metadata['data']['length'])
+    cover_title_picture_url = metadata['data']['cover_title_picture']
+    cover_title_picture_url = f"{cover_title_picture_url}&width=4742"
+    cover_picture_url = metadata['data']['cover_picture']
+    poster_picture_url = metadata['data']['poster_picture']
+    mobile_detail_picture_url = metadata['data']['mobile_detail_picture']
+    cover_title_animation_url = metadata['data']['cover_title_animation']
+    chat_id = dump_id if dump_id else message.chat.id;
     
     video_data = requestXConfession(f"{id}/play");
     stream_link = video_data['data']['streaming_links']['ahls']
@@ -198,45 +253,69 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     link = extract_best_stream(m3u8_content, base_url, duration=duration)
     print(f"link: {link}")
 
-    dropbox_link = extract_1080p_stream(m3u8_content, base_url)
-    print(f"dropbox_link: {dropbox_link}")
-
-    filename = f'{id}_{int(time())}'
-    proc = await asyncio.create_subprocess_shell(
-        f'ffmpeg -i {link} -c copy -bsf:a aac_adtstoasc {filename}.mp4',
-        stdout=PIPE,
-        stderr=PIPE
-    )
-    await _info.edit("Converting file to mp4...")
-    out, err = await proc.communicate()
-    await _info.edit('File successfully converted.')
-    print('\n\n\n', out, err, sep='\n')
-
-    dropbox_filename = filename if dropbox_link == link else f'{id}_{int(time())}'
-    if dropbox_link != link:
-      drop_proc = await asyncio.create_subprocess_shell(
-        f'ffmpeg -i {dropbox_link} -c copy -bsf:a aac_adtstoasc {dropbox_filename}.mp4',
-        stdout=PIPE,
-        stderr=PIPE
-      )
-      out, err = await drop_proc.communicate()
-      await _info.edit('File Dropbox successfully converted.')
-      print('\n\n\n', out, err, sep='\n')
+    audio_link = extract_audio_url(m3u8_content, base_url)
+    print(f"audio_link: {audio_link}")
     try: 
+        audio_filename = f'{id}_{int(time())}'
+        audio_proc = await asyncio.create_subprocess_shell(
+            f'ffmpeg -i {audio_link} -c copy {audio_filename}.aac',
+            stdout=PIPE,
+            stderr=PIPE
+        )
+        await _info.edit("Converting file to aac...")
+        out, err = await audio_proc.communicate()
+        await _info.edit('File aac successfully converted.')
+        print('\n\n\n', out, err, sep='\n')
+
+        subtitle_link = extract_english_subtitle(m3u8_content, base_url)
+        subtitle_filename = f'{id}_{int(time())}'
+        subtitle_proc = await asyncio.create_subprocess_shell(
+            f'ffmpeg -i {subtitle_link} -c copy {subtitle_filename}.vtt && ffmpeg -i {subtitle_filename}.vtt {subtitle_filename}.srt',
+            stdout=PIPE,
+            stderr=PIPE
+        )
+        # download_and_convert_subtitles(subtitle_link, f'{subtitle_filename}.vtt', f'{subtitle_filename}.srt')
+        await _info.edit("Converting file to srt...")
+        out, err = await subtitle_proc.communicate()
+        await _info.edit('File srt successfully converted.')
+        print('\n\n\n', out, err, sep='\n')
+
+        #link = 'https://cloudflarestream.com/607315e23ecdd2a05ad6879d5198cc33/manifest/stream_tffe8f5b68ebf5b39c09f0447ad45d4a3_r897789428.m3u8?useVODOTFE=false'
+
+
+        dropbox_link = extract_1080p_stream(m3u8_content, base_url)
+        print(f"dropbox_link: {dropbox_link}")
+
+        filename = f'{id}_{int(time())}'
+        proc = await asyncio.create_subprocess_shell(
+            f'ffmpeg -i {link} -i {audio_filename}.aac -c copy {filename}.mp4',
+            stdout=PIPE,
+            stderr=PIPE
+        )
+        await _info.edit("Converting file to mp4...")
+        out, err = await proc.communicate()
+        await _info.edit('File successfully converted.')
+        print('\n\n\n', out, err, sep='\n')
+
+        dropbox_filename = filename if dropbox_link == link else f'{id}_{int(time())}'
+        if dropbox_link != link:
+          drop_proc = await asyncio.create_subprocess_shell(
+            f'ffmpeg -i {dropbox_link} -i {audio_filename}.aac -c copy {dropbox_filename}.mp4',
+            stdout=PIPE,
+            stderr=PIPE
+          )
+          out, err = await drop_proc.communicate()
+          await _info.edit('File Dropbox successfully converted.')
+          print('\n\n\n', out, err, sep='\n')
         await _info.edit('Adding thumbnail...')
+        thumbnail_path = download_image(thumbnail_url)
         # proc2 = await asyncio.create_subprocess_shell(
         #     f'ffmpeg -i {filename}.mp4 -ss 00:00:30.000 -vframes 5 {filename}.jpg',
         #     stdout=PIPE,
         #     stderr=PIPE
         # )
         # await proc2.communicate()
-        #url = 'https://img.erikalust.com/22751cdd-a48a-498f-8869-d88f6aa992c2.png?auto=compress%2Cformat&ar=16:9&fit=crop&crop=edges&q=60&w=1'
-        #url = 'https://img.erikalust.com/0de6444c-2589-46c4-b1a4-c29781081d26.jpg?auto=compress%2Cformat&ar=7:4&fit=crop&crop=faces&auto=compress,format&cs=srgb&q=50&width=4742'
-        #url = 'https://img.erikalust.com/9f7ffef1-a358-4757-a820-cdcdfc1ec5cf.jpg?auto=compress%2Cformat&ar=178:252&fit=crop&crop=faces&auto=compress,format&cs=srgb&q=50&width=328'
-        # url = 'https://img.erikalust.com/2R3v3gL5YecJF0PZfAq79DbrWWfYdbelgJnoZyNe.gif?auto=compress%2Cformat'
-        #url = 'https://img.erikalust.com/da31e66d-b2b7-4c2b-841d-bc804cfc55c0.png?auto=compress%2Cformat'
-
-        thumbnail_path = download_image(thumbnail_url)
+       
         # await _info.edit('Scraping video duration...')
         # proc3 = await asyncio.create_subprocess_shell(
         #     f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {filename}.mp4',
@@ -261,14 +340,54 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
         await client.send_video(dump_id if dump_id else message.chat.id, f'{filename}.mp4', duration=duration, thumb=f'{thumbnail_path}', caption = f'{caption}', progress=progress, supports_streaming=True)
         
+        performers = ", ".join(f"{performer['name']} {performer['last_name']}" for performer in metadata['data']['performers'])
+        director_name = metadata['data']['director']['name']
+        director_last_name = metadata['data']['director']['last_name']
+        release_date = metadata['data']['release_date'].split()[0]
+        year = release_date[:4]
+        caption = f"""\
+          **XConfessions**      {title} ({year})
+**Cast:** __{performers}__
+**Director:** {director_name} {director_last_name}
+**Released:** {release_date}
+          """
+
+        await client.send_media_group(
+            chat_id,
+            [
+                InputMediaPhoto(cover_title_picture_url),
+                InputMediaPhoto(poster_picture_url),
+                InputMediaPhoto(cover_picture_url),
+                InputMediaPhoto(mobile_detail_picture_url),
+                InputMediaVideo(f'{filename}.mp4', duration=duration, caption = f'{caption}', thumb=f'{thumbnail_path}', parse_mode=ParseMode.MARKDOWN, supports_streaming=True),
+            ]
+        )
+
+        await client.send_animation(chat_id, cover_title_animation_url, caption = f'{title}')
+
         await _info.edit("Uploading file to Dropbox...")
         upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions/{title}.mp4")
+        upload_to_dropbox(f'{subtitle_filename}.srt', f"/XConfessions/{title}.srt")
         os.remove(f'{filename}.mp4')
-        #os.remove(f'{filename}.jpg')
+        os.remove(f'{audio_filename}.aac')
         os.remove(f'{thumbnail_path}')
         if dropbox_filename != filename:
           os.remove(f'{dropbox_filename}.mp4')
+        if os.path.exists(f'{subtitle_filename}.vtt'):
+          os.remove(f'{subtitle_filename}.vtt')
+        if os.path.exists(f'{subtitle_filename}.srt'):
+          os.remove(f'{subtitle_filename}.srt')
     except:
+        if os.path.exists(f'{filename}.mp4'):
+          os.remove(f'{filename}.mp4')
+        if os.path.exists(f'{thumbnail_path}'):
+          os.remove(f'{thumbnail_path}')
+        if os.path.exists(f'{subtitle_filename}.vtt'):
+          os.remove(f'{subtitle_filename}.vtt')
+        if os.path.exists(f'{subtitle_filename}.srt'):
+          os.remove(f'{subtitle_filename}.srt')
+        if os.path.exists(f'{audio_filename}.aac'):
+          os.remove(f'{audio_filename}.aac')
         print_exc()
         return await _info.edit('`An error occurred.`')
 
