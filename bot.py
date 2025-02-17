@@ -314,7 +314,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     try: 
         audio_filename = f'{id}_{int(time())}'
         audio_proc = await asyncio.create_subprocess_shell(
-            f'ffmpeg -i "{audio_link}" -c copy -bufsize 20M -probesize 20M -threads 8 -preset ultrafast "{audio_filename}.aac"',
+            f'ffmpeg -fflags +genpts -i "{audio_link}" -c copy -bufsize 20M -probesize 20M -threads 8 -preset ultrafast -flush_packets 1 -protocol_whitelist file,http,https,tcp,tls -multiple_requests 1 "{audio_filename}.aac"',
             stdout=PIPE,
             stderr=PIPE
         )
