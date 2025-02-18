@@ -321,9 +321,9 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         await _info.edit('Adding thumbnail...')
         thumbnail_path = download_image(thumbnail_url)
 
-        await _info.edit('Uploading to Telegram...')
+        await _info.edit(f'Uploading to Telegram... {id} - {title}')
 
-        await _info.edit("Uploading file to Telegram...")
+        await _info.edit(f'Uploading file to Telegram... {id} - {title}')
         def progress(current, total):
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
         
@@ -352,7 +352,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
 
         await client.send_animation(chat_id, cover_title_animation_url, caption = f'{title}')
 
-        await _info.edit("Uploading file to Dropbox...")
+        await _info.edit(f'Uploading file to Dropbox...{id} - {title}')
         upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions/{title}.mp4")
         
         os.remove(f'{filename}.mp4')
@@ -377,7 +377,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         if os.path.exists(f'{audio_filename}.aac'):
           os.remove(f'{audio_filename}.aac')
         print_exc()
-        return await _info.edit('`An error occurred.`')
+        return await _info.edit('An error occurred. {id} - {title}')
 
 
 app.run()
