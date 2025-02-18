@@ -176,24 +176,30 @@ def extract_best_stream(m3u8_content, base_url, duration=0, stream_type="video",
     return urljoin(base_url, sorted_streams[-1][1].strip())
 
 def time_to_seconds(time_str):
-    """
-    Converts a time string (H:M:S) to total seconds as an integer.
-    Example: "2:15:30" → 8130 seconds
-    """
-    try:
-        parts = list(map(int, time_str.split(":")))  # Convert to list of integers
-        if len(parts) == 3:  # Format H:M:S
-            hours, minutes, seconds = parts
-        elif len(parts) == 2:  # Format M:S (assumes 0 hours)
-            hours, minutes, seconds = 0, parts[0], parts[1]
-        else:
-            raise ValueError("Invalid time format")
-
-        total_seconds = hours * 3600 + minutes * 60 + seconds
-        return total_seconds
-    except ValueError as e:
-        print(f"Error parsing time: {e}")
-        return 0  # Default to 0 if parsing fails
+    """Parses duration from 'H:M:S' or 'Xh Ymin Zs' formats into total seconds."""
+    
+    # Check if format is H:M:S
+    if ":" in time_str:
+        parts = time_str.split(":")
+        parts = [int(p) if p.isdigit() else 0 for p in parts]  # Convert to int safely
+        
+        hours = parts[0] if len(parts) == 3 else 0
+        minutes = parts[1] if len(parts) >= 2 else 0
+        seconds = parts[2] if len(parts) == 3 else 0
+        
+    else:  # Handle '1h 54min 30s' format
+        match = re.match(r'(?:(\d+)h)?\s*(?:(\d+)min)?\s*(?:(\d+)s)?', time_str)
+        if not match:
+            return None  # Return None if invalid format
+        
+        hours = int(match.group(1)) if match.group(1) else 0
+        minutes = int(match.group(2)) if match.group(2) else 0
+        seconds = int(match.group(3)) if match.group(3) else 0
+    
+    # Convert to total seconds
+    total_seconds = (hours * 3600) + (minutes * 60) + seconds
+    
+    return total_seconds
 
 def extract_audio_url(m3u8_content, base_url):
     """Extracts the audio .m3u8 URL from M3U8 content."""
