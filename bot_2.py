@@ -10,7 +10,6 @@ from pyrogram.types.messages_and_media import audio
 import requests
 import re
 from urllib.parse import urljoin
-import dropbox
 import subprocess
 import aiohttp
 import mimetypes
@@ -21,12 +20,10 @@ api_id = os.environ['API_ID']
 api_hash = os.environ['API_HASH']
 bot_token = os.environ['BOT_TOKEN']
 dump_id = int(os.environ['DUMP_ID'])
+dump_id = ''
 xconfession_domain = 'https://next-prod-api.xconfessions.com/api/movies/'
 xconfession_token = os.environ['XCONFESSION_TOKEN']
 xconfession_headers = {"Authorization": f"Bearer {xconfession_token}"}
-
-dropbox_token = os.environ['DROPBOX_ACCESS_TOKEN']
-team_member_id = 'dbmid:AADtqt5k9g4iR19G4cUAzefiAKIe3U1lxTQ'
 
 app = Client('m3u8', api_id, api_hash, bot_token=bot_token)
 
@@ -118,7 +115,6 @@ async def send_msg(client, message, id, _info):
         thumbnail_url = metadata['data']['poster_picture']
         print(f"thumbnail_url: {thumbnail_url}")
         caption = f"{title} - XConfession"
-        duration = time_to_seconds(metadata['data']['length'])
         cover_title_picture_url = metadata['data']['cover_title_picture']
         cover_title_picture_url = f"{cover_title_picture_url}&width=4742"
         cover_picture_url = metadata['data']['cover_picture']
