@@ -378,7 +378,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         if os.path.exists(f'{audio_filename}.aac'):
           os.remove(f'{audio_filename}.aac')
         print_exc()
-        return await _info.edit('An error occurred. {id} - {title}')
+        return await _info.edit(f'An error occurred. {id} - {time()}')
 
 
 app.run()

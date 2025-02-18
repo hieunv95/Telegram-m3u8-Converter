@@ -110,7 +110,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
 async def send_msg(client, message, id, _info):
     try:
         metadata = requestXConfession(id);
-        title = metadata['data']['title']
+        title = metadata.get('data', {}).get('title', {})
         print(f"title: {title}")
         thumbnail_url = metadata['data']['poster_picture']
         print(f"thumbnail_url: {thumbnail_url}")
@@ -124,7 +124,7 @@ async def send_msg(client, message, id, _info):
         album = metadata['data']['album'];
         chat_id = dump_id if dump_id else message.chat.id;
     
-        await _info.edit("Uploading file to Telegram...")
+        await _info.edit(f"Uploading file to Telegram...{time()}")
         def progress(current, total):
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
         
@@ -179,7 +179,7 @@ async def send_msg(client, message, id, _info):
         await send_msg(client, message, id, _info)
     except:
         print_exc()
-        return await _info.edit(f'An error occurred. {id} - {title}')
+        return await _info.edit(f'An error occurred. {id} - {(time())}')
 
 
 app.run()
