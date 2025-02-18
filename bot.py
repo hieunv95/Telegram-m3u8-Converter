@@ -11,7 +11,7 @@ import requests
 import re
 from urllib.parse import urljoin
 import dropbox
-import subprocess
+from pyrogram.errors import FloodWait
 
 api_id = os.environ['API_ID']
 api_hash = os.environ['API_HASH']
@@ -87,30 +87,30 @@ def upload_to_dropbox(file_path, dropbox_path, token = ''):
     dbx = dbx.as_user(team_member_id)
 
     file_size = os.path.getsize(file_path)
-    print(f"📂 File size: {file_size / (1024 * 1024):.2f} MB")
+    #print(f"📂 File size: {file_size / (1024 * 1024):.2f} MB")
 
     try:
         with open(file_path, "rb") as f:
             if file_size <= 150 * 1024 * 1024:  # If file <= 150MB, use simple upload
-                print("📤 Using simple upload...")
+                #print("📤 Using simple upload...")
                 dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("add"))
             else:
-                print("📤 Using chunked upload...")
+                #print("📤 Using chunked upload...")
                 upload_session_start_result = dbx.files_upload_session_start(f.read(CHUNK_SIZE))
                 cursor = dropbox.files.UploadSessionCursor(session_id=upload_session_start_result.session_id, offset=f.tell())
                 commit = dropbox.files.CommitInfo(path=dropbox_path)
 
                 while f.tell() < file_size:
-                    print(f"⏳ Uploading chunk... {f.tell() / file_size:.2%} done")
+                    #print(f"⏳ Uploading chunk... {f.tell() / file_size:.2%} done")
                     dbx.files_upload_session_append(f.read(CHUNK_SIZE), cursor.session_id, cursor.offset)
                     cursor.offset = f.tell()
 
                 # Finish upload
                 dbx.files_upload_session_finish(f.read(CHUNK_SIZE), cursor, commit)
-                print("✅ Upload complete!")
+                #print("✅ Upload complete!")
     except dropbox.exceptions.AuthError as e:
         if "expired_access_token" in str(e):
-            print("🔄 Access token expired. Refreshing token...")
+            #print("🔄 Access token expired. Refreshing token...")
             token = get_new_access_token()
             if token:
                 upload_to_dropbox(file_path, dropbox_path, token)
@@ -155,7 +155,7 @@ def extract_best_stream(m3u8_content, base_url, duration=0, stream_type="video",
     sorted_streams = sorted(matches, key=lambda x: int(x[0]), reverse=True)
 
     if prefer_highest_quality:
-        print("🔹 Returning highest quality stream.")
+        #print("🔹 Returning highest quality stream.")
         selected_stream = sorted_streams[0][1].strip()
         return urljoin(base_url, selected_stream)
 
@@ -165,14 +165,14 @@ def extract_best_stream(m3u8_content, base_url, duration=0, stream_type="video",
 
         # Estimate file size in GB
         estimated_size = (bandwidth * duration) / (8 * 10**9)
-        print(f"Checking {stream_url} - Estimated Size: {estimated_size:.2f} GB")
+        #print(f"Checking {stream_url} - Estimated Size: {estimated_size:.2f} GB")
 
         # If file size <= 2GB, return it immediately
         if estimated_size <= 2:
             return urljoin(base_url, stream_url)
 
     # If all streams exceed 2GB, return the lowest quality stream
-    print("All streams >2GB, selecting the lowest quality stream.")
+    #print("All streams >2GB, selecting the lowest quality stream.")
     return urljoin(base_url, sorted_streams[-1][1].strip())
 
 def time_to_seconds(time_str):
@@ -239,44 +239,51 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
 ''')
     _info = await message.reply('Please wait...')
 
-    id = link
-    metadata = requestXConfession(id);
-    title = metadata['data']['title']
-    print(f"title: {title}")
-    thumbnail_url = metadata['data']['poster_picture']
-    print(f"thumbnail_url: {thumbnail_url}")
-    caption = f"{title} - XConfession"
-    duration = time_to_seconds(metadata['data']['length'])
-    cover_title_picture_url = metadata['data']['cover_title_picture']
-    cover_title_picture_url = f"{cover_title_picture_url}&width=4742"
-    cover_picture_url = metadata['data']['cover_picture']
-    poster_picture_url = metadata['data']['poster_picture']
-    mobile_detail_picture_url = metadata['data']['mobile_detail_picture']
-    cover_title_animation_url = metadata['data']['cover_title_animation']
-    chat_id = dump_id if dump_id else message.chat.id;
-    
-    video_data = requestXConfession(f"{id}/play");
-    stream_link = video_data['data']['streaming_links']['ahls']
-    print(f"stream_link: {stream_link}")
-    m3u8_res = requests.get(stream_link);
-    m3u8_content = m3u8_res.text;
-    base_url = urljoin(stream_link, '.');
-    print(f"base_url: {base_url}")
-    link = extract_best_stream(m3u8_content, base_url, duration=duration)
-    print(f"link: {link}")
+    ids = link.split(',')
+    for id in ids:
+      await send_msg(client, message, id, _info)
 
-    audio_link = extract_audio_url(m3u8_content, base_url)
-    print(f"audio_link: {audio_link}")
-    try: 
+
+async def send_msg(client, message, id, _info):
+    try:
+        metadata = requestXConfession(id);
+        print(f"id: {id}")
+        title = metadata['data']['title']
+        #print(f"title: {title}")
+        thumbnail_url = metadata['data']['poster_picture']
+        #print(f"thumbnail_url: {thumbnail_url}")
+        caption = f"{title} - XConfession"
+        duration = time_to_seconds(metadata['data']['length'])
+        cover_title_picture_url = metadata['data']['cover_title_picture']
+        cover_title_picture_url = f"{cover_title_picture_url}&width=4742"
+        cover_picture_url = metadata['data']['cover_picture']
+        poster_picture_url = metadata['data']['poster_picture']
+        mobile_detail_picture_url = metadata['data']['mobile_detail_picture']
+        cover_title_animation_url = metadata['data']['cover_title_animation']
+        chat_id = dump_id if dump_id else message.chat.id;
+        
+        video_data = requestXConfession(f"{id}/play");
+        stream_link = video_data['data']['streaming_links']['ahls']
+        #print(f"stream_link: {stream_link}")
+        m3u8_res = requests.get(stream_link);
+        m3u8_content = m3u8_res.text;
+        base_url = urljoin(stream_link, '.');
+        #print(f"base_url: {base_url}")
+        link = extract_best_stream(m3u8_content, base_url, duration=duration)
+        #print(f"link: {link}")
+
+        audio_link = extract_audio_url(m3u8_content, base_url)
+        #print(f"audio_link: {audio_link}")
+
         audio_filename = f'{id}_{int(time())}'
         audio_proc = await asyncio.create_subprocess_shell(
             f'ffmpeg -fflags +genpts -i "{audio_link}" -c copy -bufsize 20M -probesize 20M -threads 8 -preset ultrafast -flush_packets 1 -protocol_whitelist file,http,https,tcp,tls -multiple_requests 1 "{audio_filename}.aac"',
             stdout=PIPE,
             stderr=PIPE
         )
-        await _info.edit("Converting file to aac...")
+        await _info.edit(f'Converting file to aac...{id} {time()}')
         out, err = await audio_proc.communicate()
-        await _info.edit('File aac successfully converted.')
+        await _info.edit(f'File aac successfully converted. {id} {time()}')
         print('\n\n\n', out, err, sep='\n')
 
         subtitle_link = extract_english_subtitle(m3u8_content, base_url)
@@ -286,16 +293,16 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
             stdout=PIPE,
             stderr=PIPE
         )
-        await _info.edit("Converting file to srt...")
+        await _info.edit(f'Converting file to srt... {id} {time()}')
         out, err = await subtitle_proc.communicate()
-        await _info.edit('File srt successfully converted.')
+        await _info.edit(f'File srt successfully converted.{id} {time()}')
         print('\n\n\n', out, err, sep='\n')
 
         #link = 'https://cloudflarestream.com/607315e23ecdd2a05ad6879d5198cc33/manifest/stream_tffe8f5b68ebf5b39c09f0447ad45d4a3_r897789428.m3u8?useVODOTFE=false'
 
 
         dropbox_link = extract_best_stream(m3u8_content, base_url, prefer_highest_quality=True)
-        print(f"dropbox_link: {dropbox_link}")
+        #print(f"dropbox_link: {dropbox_link}")
 
         filename = f'{id}_{int(time())}'
         proc = await asyncio.create_subprocess_shell(
@@ -303,9 +310,9 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
             stdout=PIPE,
             stderr=PIPE
         )
-        await _info.edit("Converting file to mp4...")
+        await _info.edit(f'Converting file to mp4... {id} {time()}')
         out, err = await proc.communicate()
-        await _info.edit('File successfully converted.')
+        await _info.edit(f'File successfully converted. {id} {time()}')
         print('\n\n\n', out, err, sep='\n')
 
         dropbox_filename = filename if dropbox_link == link else f'{id}_{int(time())}'
@@ -316,7 +323,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
             stderr=PIPE
           )
           out, err = await drop_proc.communicate()
-          await _info.edit('File Dropbox successfully converted.')
+          await _info.edit(f'File Dropbox successfully converted. {id} {time()}')
           print('\n\n\n', out, err, sep='\n')
         await _info.edit('Adding thumbnail...')
         thumbnail_path = download_image(thumbnail_url)
@@ -366,17 +373,25 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
         if os.path.exists(f'{subtitle_filename}.srt'):
           upload_to_dropbox(f'{subtitle_filename}.srt', f"/XConfessions/{title}.srt")
           os.remove(f'{subtitle_filename}.srt')
+    except FloodWait as e:
+        wait_time = getattr(e, 'value', 400)  # Default to 400 seconds if 'value' is not available
+        print(f"Rate limit hit. Waiting for {wait_time} seconds... {id} - {time()}")
+        await asyncio.sleep(wait_time)  # Sleep for the required time and try again
+        await send_msg(client, message, id, _info)
     except:
-        if os.path.exists(f'{filename}.mp4'):
-          os.remove(f'{filename}.mp4')
-        if os.path.exists(f'{thumbnail_path}'):
-          os.remove(f'{thumbnail_path}')
-        if os.path.exists(f'{subtitle_filename}.vtt'):
-          os.remove(f'{subtitle_filename}.vtt')
-        if os.path.exists(f'{subtitle_filename}.srt'):
-          os.remove(f'{subtitle_filename}.srt')
-        if os.path.exists(f'{audio_filename}.aac'):
-          os.remove(f'{audio_filename}.aac')
+        try:
+            if os.path.exists(f'{filename}.mp4'):
+                os.remove(f'{filename}.mp4')
+            if os.path.exists(f'{thumbnail_path}'):
+                os.remove(f'{thumbnail_path}')
+            if os.path.exists(f'{subtitle_filename}.vtt'):
+                os.remove(f'{subtitle_filename}.vtt')
+            if os.path.exists(f'{subtitle_filename}.srt'):
+                os.remove(f'{subtitle_filename}.srt')
+            if os.path.exists(f'{audio_filename}.aac'):
+                os.remove(f'{audio_filename}.aac')
+        except:
+            return await _info.edit(f'An error occurred. {id} - {time()}')
         print_exc()
         return await _info.edit(f'An error occurred. {id} - {time()}')
 
