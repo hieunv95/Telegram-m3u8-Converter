@@ -177,13 +177,13 @@ async def send_msg(client, message, id, _info):
 
         await client.send_animation(chat_id, cover_title_animation_url, caption = f'{caption}')
     except FloodWait as e:
-        wait_time = getattr(e, 'x', 400)  # Default to 400 seconds if 'x' is not available
+        wait_time = getattr(e, 'value', 400)  # Default to 400 seconds if 'x' is not available
         print(f"Rate limit hit. Waiting for {wait_time} seconds...")
         await asyncio.sleep(wait_time)  # Sleep for the required time and try again
         await send_msg(client, message, id, _info)
     except:
         print_exc()
-        return await _info.edit('`An error occurred.`')
+        return await _info.edit(f'An error occurred. {id} - {title}')
 
 
 app.run()

@@ -354,6 +354,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
 
         await _info.edit(f'Uploading file to Dropbox...{id} - {title}')
         upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions/{title}.mp4")
+        await _info.edit(f'Complete {id} - {title}')
         
         os.remove(f'{filename}.mp4')
         os.remove(f'{audio_filename}.aac')
