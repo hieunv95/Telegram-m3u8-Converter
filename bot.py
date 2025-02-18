@@ -344,7 +344,7 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
             [
                 InputMediaPhoto(cover_title_picture_url),
                 InputMediaPhoto(poster_picture_url),
-                InputMediaPhoto(cover_picture_url),
+                InputMediaPhoto(cover_picture_url + '&width=1274'),
                 InputMediaPhoto(mobile_detail_picture_url),
                 InputMediaVideo(f'{filename}.mp4', duration=duration, caption = f'{caption}', thumb=f'{thumbnail_path}', parse_mode=ParseMode.MARKDOWN, supports_streaming=True),
             ]
