@@ -328,8 +328,8 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
         
         performers = ", ".join(f"{performer['name']} {performer['last_name']}" for performer in metadata['data']['performers'])
-        director_name = metadata['data']['director']['name']
-        director_last_name = metadata['data']['director']['last_name']
+        director_name = metadata.get('data', {}).get('director', {}).get('name', '')
+        director_last_name = metadata.get('data', {}).get('director', {}).get('last_name', '')
         release_date = metadata['data']['release_date'].split()[0]
         year = release_date[:4]
         caption = f"""\
