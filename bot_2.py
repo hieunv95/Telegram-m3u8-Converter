@@ -170,7 +170,7 @@ async def send_msg(client, message, id, _info):
             [
                 InputMediaPhoto(poster_picture_url),
                 InputMediaPhoto(mobile_detail_picture_url),
-                InputMediaPhoto(cover_picture_url),
+                InputMediaPhoto(cover_picture_url+'&width=1274'),
                 InputMediaPhoto(cover_title_picture_url),
             ] 
         )
