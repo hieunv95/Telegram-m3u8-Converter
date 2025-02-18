@@ -12,6 +12,7 @@ import re
 from urllib.parse import urljoin
 import dropbox
 from pyrogram.errors import FloodWait
+import traceback
 
 api_id = os.environ['API_ID']
 api_hash = os.environ['API_HASH']
@@ -360,7 +361,7 @@ async def send_msg(client, message, id, _info):
         await client.send_animation(chat_id, cover_title_animation_url, caption = f'{title}')
 
         await _info.edit(f'Uploading file to Dropbox...{id} - {title}')
-        upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions/{title}.mp4")
+        upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions2/{title}.mp4")
         await _info.edit(f'Complete {id} - {title}')
         
         os.remove(f'{filename}.mp4')
@@ -371,14 +372,14 @@ async def send_msg(client, message, id, _info):
         if os.path.exists(f'{subtitle_filename}.vtt'):
           os.remove(f'{subtitle_filename}.vtt')
         if os.path.exists(f'{subtitle_filename}.srt'):
-          upload_to_dropbox(f'{subtitle_filename}.srt', f"/XConfessions/{title}.srt")
+          upload_to_dropbox(f'{subtitle_filename}.srt', f"/XConfessions2/{title}.srt")
           os.remove(f'{subtitle_filename}.srt')
     except FloodWait as e:
         wait_time = getattr(e, 'value', 400)  # Default to 400 seconds if 'value' is not available
         print(f"Rate limit hit. Waiting for {wait_time} seconds... {id} - {time()}")
         await asyncio.sleep(wait_time)  # Sleep for the required time and try again
         await send_msg(client, message, id, _info)
-    except:
+    except Exception as e:
         try:
             if os.path.exists(f'{filename}.mp4'):
                 os.remove(f'{filename}.mp4')
@@ -393,6 +394,8 @@ async def send_msg(client, message, id, _info):
         except:
             return await _info.edit(f'An error occurred. {id} - {time()}')
         print_exc()
+        error_message = f"⚠️ **Error:** {str(e)}\n```{traceback.format_exc()}```"
+        await client.send_message(message.chat.id, error_message, parse_mode=ParseMode.MARKDOWN)
         return await _info.edit(f'An error occurred. {id} - {time()}')
 
 
