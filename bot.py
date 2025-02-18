@@ -21,10 +21,30 @@ xconfession_domain = 'https://next-prod-api.xconfessions.com/api/movies/'
 xconfession_token = os.environ['XCONFESSION_TOKEN']
 xconfession_headers = {"Authorization": f"Bearer {xconfession_token}"}
 
+# Dropbox App Credentials
 dropbox_token = os.environ['DROPBOX_ACCESS_TOKEN']
 team_member_id = 'dbmid:AADtqt5k9g4iR19G4cUAzefiAKIe3U1lxTQ'
+DBX_APP_KEY = os.environ['DBX_APP_KEY']
+DBX_APP_SECRET = os.environ['DBX_APP_SECRET']
+DBX_REFRESH_TOKEN = os.environ['DBX_REFRESH_TOKEN']
 
-dbx = dropbox.DropboxTeam(dropbox_token)
+def get_new_access_token():
+    """Fetch a new access token using the refresh token."""
+    url = "https://api.dropboxapi.com/oauth2/token"
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": DBX_REFRESH_TOKEN
+    }
+    auth = (DBX_APP_KEY, DBX_APP_SECRET)
+
+    response = requests.post(url, data=data, auth=auth)
+    if response.status_code == 200:
+        return response.json().get("access_token")
+    else:
+        print("Failed to refresh Dropbox token:", response.json())
+        return None
+
+# dbx = dropbox.DropboxTeam(dropbox_token)
 
 # try:
 #     members = dbx.team_members_list().members
@@ -56,97 +76,48 @@ def requestXConfession(path):
         return response.json()
     return None
 
-def extract_1080p_stream(m3u8_content, base_url):
-    """
-    Trích xuất URL video 1080p từ nội dung M3U8.
-    """
-    pattern = re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1920x1080.*?\n(.*?)$', re.MULTILINE)
-    match = pattern.search(m3u8_content)
-
-    if match:
-        stream_url = match.group(1).strip()
-        return urljoin(base_url, stream_url)  # Chuyển đổi URL đầy đủ
-
-    return None  # Không tìm thấy 1080
-
-# def upload_to_dropbox(file_path, dropbox_path):
-#     """
-#     Tải file lên Dropbox (không giới hạn kích thước).
-#     """
-#     dbx = dropbox.DropboxTeam(dropbox_token)
-    
-#     with open(file_path, "rb") as f:
-#         print(f"📤 Đang tải lên {file_path} lên Dropbox...")
-
-#         try:
-#             dbx = dbx.as_user(team_member_id)
-#             dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
-#             print("✅ Tải lên Dropbox thành công!")
-#         except Exception as e:
-#             print(f"❌ Lỗi khi tải lên Dropbox: {e}")
-
 # Dropbox chunk size (48MB is a safe choice)
 CHUNK_SIZE = 48 * 1024 * 1024  # 48MB
 
-def upload_to_dropbox(file_path, dropbox_path):
+def upload_to_dropbox(file_path, dropbox_path, token = ''):
     """
     Uploads a file to Dropbox. Uses chunked upload if file is larger than 150MB.
     """
-    dbx = dropbox.DropboxTeam(dropbox_token)
+    dbx = dropbox.DropboxTeam(token if token else dropbox_token)
     dbx = dbx.as_user(team_member_id)
 
     file_size = os.path.getsize(file_path)
     print(f"📂 File size: {file_size / (1024 * 1024):.2f} MB")
 
-    with open(file_path, "rb") as f:
-        if file_size <= 150 * 1024 * 1024:  # If file <= 150MB, use simple upload
-            print("📤 Using simple upload...")
-            dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("add"))
+    try:
+        with open(file_path, "rb") as f:
+            if file_size <= 150 * 1024 * 1024:  # If file <= 150MB, use simple upload
+                print("📤 Using simple upload...")
+                dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("add"))
+            else:
+                print("📤 Using chunked upload...")
+                upload_session_start_result = dbx.files_upload_session_start(f.read(CHUNK_SIZE))
+                cursor = dropbox.files.UploadSessionCursor(session_id=upload_session_start_result.session_id, offset=f.tell())
+                commit = dropbox.files.CommitInfo(path=dropbox_path)
+
+                while f.tell() < file_size:
+                    print(f"⏳ Uploading chunk... {f.tell() / file_size:.2%} done")
+                    dbx.files_upload_session_append(f.read(CHUNK_SIZE), cursor.session_id, cursor.offset)
+                    cursor.offset = f.tell()
+
+                # Finish upload
+                dbx.files_upload_session_finish(f.read(CHUNK_SIZE), cursor, commit)
+                print("✅ Upload complete!")
+    except dropbox.exceptions.AuthError as e:
+        if "expired_access_token" in str(e):
+            print("🔄 Access token expired. Refreshing token...")
+            token = get_new_access_token()
+            if token:
+                upload_to_dropbox(file_path, dropbox_path, token)
+            else:
+                print("❌ Failed to refresh token. Upload aborted.")
         else:
-            print("📤 Using chunked upload...")
-            upload_session_start_result = dbx.files_upload_session_start(f.read(CHUNK_SIZE))
-            cursor = dropbox.files.UploadSessionCursor(session_id=upload_session_start_result.session_id, offset=f.tell())
-            commit = dropbox.files.CommitInfo(path=dropbox_path)
-
-            while f.tell() < file_size:
-                print(f"⏳ Uploading chunk... {f.tell() / file_size:.2%} done")
-                dbx.files_upload_session_append(f.read(CHUNK_SIZE), cursor.session_id, cursor.offset)
-                cursor.offset = f.tell()
-
-            # Finish upload
-            dbx.files_upload_session_finish(f.read(CHUNK_SIZE), cursor, commit)
-            print("✅ Upload complete!")
-
-
-# def extract_best_stream(m3u8_content, base_url, duration, size_limit=2 * 1024 * 1024 * 1024):
-#     """
-#     Extracts 1080p stream if available. If its estimated file size > 2GB, fall back to 720p.
-#     Returns the best available stream URL.
-#     """
-#     # Define regex patterns for 1080p and 720p streams
-#     patterns = {
-#         "1080p": re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1920x1080.*?BANDWIDTH=(\d+).*?\n(.*?)$', re.MULTILINE),
-#         "720p": re.compile(r'#EXT-X-STREAM-INF:RESOLUTION=1280x720.*?BANDWIDTH=(\d+).*?\n(.*?)$', re.MULTILINE)
-#     }
-
-#     # Try to extract 1080p first
-#     for quality, pattern in patterns.items():
-#         match = pattern.search(m3u8_content)
-#         if match:
-#             bandwidth = int(match.group(1))  # BANDWIDTH in bits per second
-#             url = match.group(2).strip()  # Extract stream URL
-
-#             estimated_size = (bandwidth / 8) * duration  # Convert bits to bytes
-
-#             # If it's 1080p and too large (>2GB), continue to check 720p
-#             if quality == "1080p" and estimated_size > size_limit:
-#                 continue  # Skip 1080p and try 720p
-
-#             # Otherwise, return the stream URL
-#             full_url = urljoin(base_url, url)
-#             return full_url
-
-#     return None  # No valid stream found
+            print("❌ Dropbox upload error:", e)   
 
 
 def extract_best_stream(m3u8_content, base_url, duration=0, stream_type="video", prefer_highest_quality=False):
@@ -244,27 +215,6 @@ def extract_english_subtitle(m3u8_content, base_url):
 
     return None
 
-# def download_and_convert_subtitles(m3u8_url, vtt_file="subtitles.vtt", srt_file="subtitles.srt"):
-#     """Download subtitles from .m3u8 as .vtt and convert to .srt using FFmpeg."""
-    
-#     # Command to download .vtt
-#     download_command = ["ffmpeg", "-i", m3u8_url, "-c", "copy", vtt_file]
-
-#     # Command to convert .vtt to .srt
-#     convert_command = ["ffmpeg", "-i", vtt_file, srt_file]
-
-#     try:
-#         # Run download command
-#         subprocess.run(download_command, check=True)
-#         print(f"✅ Downloaded: {vtt_file}")
-
-#         # Run convert command
-#         subprocess.run(convert_command, check=True)
-#         print(f"✅ Converted: {srt_file}")
-
-#     except subprocess.CalledProcessError as e:
-#         print(f"❌ Error: {e}")
-
 
 @app.on_message(filters.command('start'))
 async def start(_, message):
@@ -330,7 +280,6 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
             stdout=PIPE,
             stderr=PIPE
         )
-        # download_and_convert_subtitles(subtitle_link, f'{subtitle_filename}.vtt', f'{subtitle_filename}.srt')
         await _info.edit("Converting file to srt...")
         out, err = await subtitle_proc.communicate()
         await _info.edit('File srt successfully converted.')
@@ -365,36 +314,12 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
           print('\n\n\n', out, err, sep='\n')
         await _info.edit('Adding thumbnail...')
         thumbnail_path = download_image(thumbnail_url)
-        # proc2 = await asyncio.create_subprocess_shell(
-        #     f'ffmpeg -i {filename}.mp4 -ss 00:00:30.000 -vframes 5 {filename}.jpg',
-        #     stdout=PIPE,
-        #     stderr=PIPE
-        # )
-        # await proc2.communicate()
-       
-        # await _info.edit('Scraping video duration...')
-        # proc3 = await asyncio.create_subprocess_shell(
-        #     f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {filename}.mp4',
-        #     stdout=PIPE,
-        #     stderr=STDOUT
-        # )
-        # try:
-        #   duration, _ = await proc3.communicate()
-        #   print("duration1 : {duration}")
-        #   duration = duration.decode().strip()
-        #   print("duration2 : {duration}")
-        #   duration = int(float(duration))
-        #   print("duration3 : {duration}")
-        # except (ValueError, AttributeError) as e:
-        #     print(f"Error parsing duration: {e}")
-        #     duration = 0  # Default value if parsing fails
 
         await _info.edit('Uploading to Telegram...')
 
         await _info.edit("Uploading file to Telegram...")
         def progress(current, total):
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
-        #await client.send_video(dump_id if dump_id else message.chat.id, f'{filename}.mp4', duration=duration, thumb=f'{thumbnail_path}', caption = f'{caption}', progress=progress, supports_streaming=True)
         
         performers = ", ".join(f"{performer['name']} {performer['last_name']}" for performer in metadata['data']['performers'])
         director_name = metadata['data']['director']['name']
