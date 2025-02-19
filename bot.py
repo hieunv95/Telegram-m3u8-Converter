@@ -326,8 +326,8 @@ async def send_msg(client, message, id, _info):
           out, err = await drop_proc.communicate()
           await _info.edit(f'File Dropbox successfully converted. {id} {time()}')
           print('\n\n\n', out, err, sep='\n')
-        await _info.edit('Adding thumbnail...')
-        thumbnail_path = download_image(thumbnail_url)
+        await _info.edit(f'Adding thumbnail...{id} {time()}')
+        thumbnail_path = download_image(thumbnail_url, f'{id}_{int(time())}.jpg')
 
         await _info.edit(f'Uploading to Telegram... {id} - {title}')
 
@@ -394,7 +394,7 @@ async def send_msg(client, message, id, _info):
         except:
             return await _info.edit(f'An error occurred. {id} - {time()}')
         print_exc()
-        error_message = f"⚠️ **Error:** {str(e)}\n```{traceback.format_exc()}```"
+        error_message = f"⚠️ **Error:** {str(e)}\n**ID:** {id}\n```{traceback.format_exc()}```"
         await client.send_message(message.chat.id, error_message, parse_mode=ParseMode.MARKDOWN)
         return await _info.edit(f'An error occurred. {id} - {time()}')
 
