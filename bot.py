@@ -222,6 +222,35 @@ def extract_english_subtitle(m3u8_content, base_url):
 
     return None
 
+def search_file_in_dropbox(filename, token = ''):
+    try:
+      dbx = dropbox.DropboxTeam(token if token else dropbox_token)
+      dbx = dbx.as_user(team_member_id)
+      # Search for the file recursively in the given path
+      result = dbx.files_search('', filename)
+
+      if result.matches:
+          #print(f"🔍 Found {len(result.matches)} result(s):")
+          #for match in result.matches:
+              #metadata = match.metadata
+              #print(f"📂 Path: {metadata.path_lower}")
+              #print(f"📏 Size: {metadata.size / (1024*1024):.2f} MB")
+          return True
+    except dropbox.exceptions.AuthError as e:
+        if "expired_access_token" in str(e):
+            #print("🔄 Access token expired. Refreshing token...")
+            token = get_new_access_token()
+            if token:
+                search_file_in_dropbox(filename, token)
+            else:
+                print("❌ Failed to refresh token. Upload aborted.")
+        else:
+            print("❌ Dropbox search error:", e)   
+    except Exception as e:
+        print("❌ Error:", e)
+    return False;
+
+
 
 @app.on_message(filters.command('start'))
 async def start(_, message):
@@ -241,16 +270,23 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     _info = await message.reply('Please wait...')
 
     ids = link.split(',')
+    missing_ids = ''
     for id in ids:
-      await send_msg(client, message, id, _info)
-
+      missing_id = await send_msg(client, message, id, _info)
+      if missing_id:
+        missing_ids = missing_ids + f',{missing_id}'
+    await _info.edit(f'Missing IDs: {missing_ids}')
 
 async def send_msg(client, message, id, _info):
     try:
         metadata = requestXConfession(id);
         print(f"id: {id}")
         title = metadata['data']['title']
-        #print(f"title: {title}")
+        print(f"title: {title}")
+        #fileExist = search_file_in_dropbox(title)
+        #if fileExist == False:
+        #  return id;
+        #return
         thumbnail_url = metadata['data']['poster_picture']
         #print(f"thumbnail_url: {thumbnail_url}")
         caption = f"{title} - XConfession"
@@ -347,21 +383,44 @@ async def send_msg(client, message, id, _info):
 **Released:** {release_date}
           """
 
-        await client.send_media_group(
-            chat_id,
-            [
-                InputMediaPhoto(cover_title_picture_url),
-                InputMediaPhoto(poster_picture_url),
-                InputMediaPhoto(cover_picture_url + '&width=1274'),
-                InputMediaPhoto(mobile_detail_picture_url),
-                InputMediaVideo(f'{filename}.mp4', duration=duration, caption = f'{caption}', thumb=f'{thumbnail_path}', parse_mode=ParseMode.MARKDOWN, supports_streaming=True),
-            ]
-        )
-
-        await client.send_animation(chat_id, cover_title_animation_url, caption = f'{title}')
-
         await _info.edit(f'Uploading file to Dropbox...{id} - {title}')
         upload_to_dropbox(f'{dropbox_filename}.mp4', f"/XConfessions2/{title}.mp4")
+
+        media_files = []
+
+        # Danh sách các URL cần kiểm tra
+        if cover_title_picture_url:
+            media_files.append(InputMediaPhoto(cover_title_picture_url))
+
+        if poster_picture_url:
+            media_files.append(InputMediaPhoto(poster_picture_url))
+
+        if cover_picture_url:
+            media_files.append(InputMediaPhoto(cover_picture_url + '&width=1274'))
+
+        if mobile_detail_picture_url:
+            media_files.append(InputMediaPhoto(mobile_detail_picture_url))
+
+        # Kiểm tra file video có tồn tại không
+        if filename and duration and thumbnail_path:
+            media_files.append(InputMediaVideo(
+                f'{filename}.mp4',
+                duration=duration,
+                caption=f'{caption}',
+                thumb=f'{thumbnail_path}',
+                parse_mode=ParseMode.MARKDOWN,
+                supports_streaming=True
+            ))
+
+        # Gửi nếu danh sách không rỗng
+        if media_files:
+            await client.send_media_group(chat_id, media_files)
+        else:
+            print("Không có media nào để gửi!")
+
+        if cover_title_animation_url:
+          await client.send_animation(chat_id, cover_title_animation_url, caption = f'{title}')
+
         await _info.edit(f'Complete {id} - {title}')
         
         os.remove(f'{filename}.mp4')
