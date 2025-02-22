@@ -189,9 +189,9 @@ def time_to_seconds(time_str):
         seconds = parts[2] if len(parts) == 3 else 0
         
     else:  # Handle '1h 54min 30s' format
-        match = re.match(r'(?:(\d+)h)?\s*(?:(\d+)min)?\s*(?:(\d+)s)?', time_str)
+        match = re.match(r'(?:(\d+)h)?\s*(?:(\d+) *min)?\s*(?:(\d+) *s)?', time_str)
         if not match:
-            return None  # Return None if invalid format
+            return 0  # Return None if invalid format
         
         hours = int(match.group(1)) if match.group(1) else 0
         minutes = int(match.group(2)) if match.group(2) else 0
@@ -372,8 +372,9 @@ async def send_msg(client, message, id, _info):
             print(message.from_user.first_name, ' -> ', current, '/', total, sep='')
         
         performers = ", ".join(f"{performer['name']} {performer['last_name']}" for performer in metadata['data']['performers'])
-        director_name = metadata.get('data', {}).get('director', {}).get('name', '')
-        director_last_name = metadata.get('data', {}).get('director', {}).get('last_name', '')
+        director = metadata.get('director', {})  # Tránh lỗi nếu 'director' không tồn tại
+        director_name = director and director.get('name', '')  # Lấy 'name', mặc định là chuỗi rỗng
+        director_last_name = director and director.get('last_name', '')  # 
         release_date = metadata['data']['release_date'].split()[0]
         year = release_date[:4]
         caption = f"""\
@@ -402,7 +403,7 @@ async def send_msg(client, message, id, _info):
             media_files.append(InputMediaPhoto(mobile_detail_picture_url))
 
         # Kiểm tra file video có tồn tại không
-        if filename and duration and thumbnail_path:
+        if filename and thumbnail_path:
             media_files.append(InputMediaVideo(
                 f'{filename}.mp4',
                 duration=duration,
@@ -453,7 +454,14 @@ async def send_msg(client, message, id, _info):
         except:
             return await _info.edit(f'An error occurred. {id} - {time()}')
         print_exc()
-        error_message = f"⚠️ **Error:** {str(e)}\n**ID:** {id}\n```{traceback.format_exc()}```"
+        MAX_LENGTH = 1000  # Để tránh vượt quá giới hạn 4096 ký tự
+
+        error_trace = traceback.format_exc()
+        if len(error_trace) > MAX_LENGTH:
+            error_trace = error_trace[:MAX_LENGTH] + "\n...(Truncated)"
+
+        error_message = f"⚠️ **Error:** {str(e)}\n**ID:** {id}\n```{error_trace}```"
+
         await client.send_message(message.chat.id, error_message, parse_mode=ParseMode.MARKDOWN)
         return await _info.edit(f'An error occurred. {id} - {time()}')
 
