@@ -420,6 +420,7 @@ async def send_msg(client, message, id, _info):
 
         # Gửi nếu danh sách không rỗng
         if media_files:
+            await _info.edit(f'Uploading file to Telegram...{id} - {title}')
             await client.send_media_group(chat_id, media_files)
         else:
             print("Không có media nào để gửi!")
@@ -429,9 +430,6 @@ async def send_msg(client, message, id, _info):
 
         await _info.edit(f'Complete {id} - {title}')
         
-        os.remove(f'{filename}.mp4')
-        os.remove(f'{audio_filename}.aac')
-        os.remove(f'{thumbnail_path}')
         if dropbox_filename != filename:
           os.remove(f'{dropbox_filename}.mp4')
         if os.path.exists(f'{subtitle_filename}.vtt'):
@@ -439,6 +437,13 @@ async def send_msg(client, message, id, _info):
         if os.path.exists(f'{subtitle_filename}.srt'):
           upload_to_dropbox(f'{subtitle_filename}.srt', f"/XConfessions2/{title}.srt")
           os.remove(f'{subtitle_filename}.srt')
+
+        if os.path.exists(f'{filename}.mp4'):
+            os.remove(f'{filename}.mp4')
+        if os.path.exists(f'{audio_filename}.aac'):
+            os.remove(f'{audio_filename}.aac')
+        if os.path.exists(f'{thumbnail_path}'):
+            os.remove(f'{thumbnail_path}')
     except FloodWait as e:
         wait_time = getattr(e, 'value', 400)  # Default to 400 seconds if 'value' is not available
         print(f"Rate limit hit. Waiting for {wait_time} seconds... {id} - {time()}")
