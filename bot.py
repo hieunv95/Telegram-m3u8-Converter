@@ -63,6 +63,8 @@ app = Client('m3u8', api_id, api_hash, bot_token=bot_token)
 #     print(user)
 
 def download_image(url, filename="thumbnail.jpg"):
+    if not url:
+      return None;
     response = requests.get(url)
     if response.status_code == 200:
         with open(filename, "wb") as f:
@@ -273,9 +275,9 @@ Github Repo: [Click to go.](https://github.com/hieunv95/Telegram-m3u8-Converter/
     missing_ids = ''
     for id in ids:
       missing_id = await send_msg(client, message, id, _info)
-      if missing_id:
-        missing_ids = missing_ids + f',{missing_id}'
-    await _info.edit(f'Missing IDs: {missing_ids}')
+      #if missing_id:
+        #missing_ids = missing_ids + f',{missing_id}'
+    #await _info.edit(f'Missing IDs: {missing_ids}')
 
 async def send_msg(client, message, id, _info):
     try:
@@ -403,15 +405,18 @@ async def send_msg(client, message, id, _info):
             media_files.append(InputMediaPhoto(mobile_detail_picture_url))
 
         # Kiểm tra file video có tồn tại không
-        if filename and thumbnail_path:
-            media_files.append(InputMediaVideo(
-                f'{filename}.mp4',
-                duration=duration,
-                caption=f'{caption}',
-                thumb=f'{thumbnail_path}',
-                parse_mode=ParseMode.MARKDOWN,
-                supports_streaming=True
-            ))
+        if filename:
+            video_kwargs = {
+                "media": f"{filename}.mp4",
+                "duration": duration,
+                "caption": f"{caption}",
+                "parse_mode": ParseMode.MARKDOWN,
+                "supports_streaming": True
+            }
+
+            if thumbnail_path:  # Nếu thumbnail_path tồn tại, thêm thumb vào video_kwargs
+              video_kwargs["thumb"] = thumbnail_path
+            media_files.append(InputMediaVideo(**video_kwargs))
 
         # Gửi nếu danh sách không rỗng
         if media_files:
@@ -440,6 +445,7 @@ async def send_msg(client, message, id, _info):
         await asyncio.sleep(wait_time)  # Sleep for the required time and try again
         await send_msg(client, message, id, _info)
     except Exception as e:
+        print_exc()
         try:
             if os.path.exists(f'{filename}.mp4'):
                 os.remove(f'{filename}.mp4')
@@ -453,7 +459,6 @@ async def send_msg(client, message, id, _info):
                 os.remove(f'{audio_filename}.aac')
         except:
             return await _info.edit(f'An error occurred. {id} - {time()}')
-        print_exc()
         MAX_LENGTH = 1000  # Để tránh vượt quá giới hạn 4096 ký tự
 
         error_trace = traceback.format_exc()
